@@ -1,0 +1,111 @@
+# contabiliza-insights — API Java + infraestrutura de desenvolvimento
+#
+#   docker compose up -d                          → só a infraestrutura: postgres, redis e pgadmin
+#   docker compose --profile app up -d --build    → infraestrutura + API em container
+#
+# Os três repositórios usam a rede Docker "contabiliza-net", criada UMA VEZ por máquina com:
+#   docker network create contabiliza-net
+# Dentro da rede os serviços se acham pelo nome:
+# postgres:5432, redis:6379, api:8080, processamento:8000.
+#
+# Tudo é publicado só em 127.0.0.1 (esta máquina). No Railway este arquivo NÃO é usado:
+# Postgres e Redis são serviços do Railway e a API é construída pelo Dockerfile (docs/DEPLOY_RAILWAY.md).
+
+name: contabiliza-insights
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-relatorios}
+      POSTGRES_USER: ${DB_SUPERUSER:-postgres}
+      POSTGRES_PASSWORD: ${DB_SUPERUSER_PASSWORD:?defina DB_SUPERUSER_PASSWORD no .env}
+      # Usados só pelo script infra/postgres/01-papeis.sh (1ª criação do volume)
+      DB_MIGRATOR_USER: ${DB_MIGRATOR_USER:-app_migrator}
+      DB_MIGRATOR_PASSWORD: ${DB_MIGRATOR_PASSWORD:?defina DB_MIGRATOR_PASSWORD no .env}
+      DB_APP_USER: ${DB_APP_USER:-app_rw}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD:?defina DB_APP_PASSWORD no .env}
+      TZ: America/Recife
+    volumes:
+      - dados-postgres:/var/lib/postgresql/data
+      - ./infra/postgres/01-papeis.sh:/docker-entrypoint-initdb.d/01-papeis.sh:ro
+    ports:
+      - "127.0.0.1:${DB_PORT:-5434}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [contabiliza]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly yes"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?defina REDIS_PASSWORD no .env}
+    volumes:
+      - dados-redis:/data
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6380}:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [contabiliza]
+
+  pgadmin:
+    image: dpage/pgadmin4:9
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:?defina PGADMIN_EMAIL no .env}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?defina PGADMIN_PASSWORD no .env}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+      PGADMIN_SERVER_JSON_FILE: /pgadmin4/servers.json
+    volumes:
+      - dados-pgadmin:/var/lib/pgadmin
+      - ./infra/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    ports:
+      - "127.0.0.1:${PGADMIN_PORT:-5052}:80"
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [contabiliza]
+
+  api:
+    profiles: [app]
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Dentro da rede Docker os endereços e portas são outros que os do .env (feitos para ./mvnw)
+      DB_HOST: postgres
+      DB_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PROCESSAMENTO_URL: http://processamento:8000
+      API_PORT: 8080
+      MANAGEMENT_PORT: 8081
+      LOG_FORMAT: ecs
+    volumes:
+      # Chave JSON do Google (só se EMAIL_MODO=gmail-api): GOOGLE_SERVICE_ACCOUNT_FILE=/run/segredos/<arquivo>.json
+      - ./segredos:/run/segredos:ro
+    ports:
+      - "127.0.0.1:${API_PORT:-8080}:8080"
+      - "127.0.0.1:${MANAGEMENT_PORT:-8081}:8081"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [contabiliza]
+
+volumes:
+  dados-postgres:
+  dados-redis:
+  dados-pgadmin:
+
+networks:
+  contabiliza:
+    name: contabiliza-net
+    external: true      # criada uma vez com: docker network create contabiliza-net

@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Contabiliza Insights (Docker)",
+      "Group": "Contabiliza",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "relatorios",
+      "Username": "postgres",
+      "SSLMode": "prefer",
+      "Comment": "Superusuário do container. A senha é a DB_SUPERUSER_PASSWORD do .env (o pgAdmin pede no 1º acesso)."
+    }
+  }
+}

@@ -1,0 +1,6 @@
+# O contexto de build da API é a raiz do repositório: só entram pom.xml, mvnw, .mvn e src
+*
+!pom.xml
+!mvnw
+!.mvn/
+!src/

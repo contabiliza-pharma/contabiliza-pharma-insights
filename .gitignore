@@ -1,0 +1,17 @@
+# Segredos
+.env
+segredos/*
+!segredos/.gitkeep
+*.json.key
+
+# Build Java / Maven
+target/
+.mvn/wrapper/maven-wrapper.jar
+*.iml
+.idea/
+.vscode/
+
+# Artefatos locais
+dump.rdb
+exemplos/
+*.log

@@ -1,0 +1,26 @@
+# Lista curta de senhas comuns (inicial). Substituir por uma lista maior (ex.: top 100 mil) — Guia §6.13.
+12345678
+123456789
+1234567890
+password
+password1
+senha123
+senha1234
+mudar123
+abc12345
+abcd1234
+qwerty123
+q1w2e3r4
+1q2w3e4r
+admin123
+admin1234
+brasil123
+contabiliza1
+contabiliza123
+farmacia123
+iloveyou1
+teste123
+teste1234
+a1b2c3d4
+11223344a
+aa123456

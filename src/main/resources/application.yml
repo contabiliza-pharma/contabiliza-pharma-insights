@@ -1,0 +1,121 @@
+# Configuração da API. Nenhum segredo aqui: tudo vem de variáveis de ambiente (Guia §6.6).
+spring:
+  application:
+    name: relatorios-api
+  config:
+    # Rodando com ./mvnw spring-boot:run, lê o .env da raiz do projeto.
+    # Variáveis de ambiente reais (ex.: as do docker-compose) têm prioridade sobre o arquivo.
+    import: optional:file:.env[.properties]
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:relatorios}?stringtype=unspecified
+    username: ${DB_APP_USER:app_rw}
+    password: ${DB_APP_PASSWORD:}
+    hikari:
+      maximum-pool-size: ${DB_POOL:10}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none              # o esquema é só das migrações Flyway
+    properties:
+      hibernate.jdbc.time_zone: America/Recife
+  flyway:
+    enabled: true
+    # Migrações rodam com o papel dono das tabelas (app_migrator); a API usa app_rw.
+    user: ${DB_MIGRATOR_USER:app_migrator}
+    password: ${DB_MIGRATOR_PASSWORD:}
+    placeholders:
+      app_role: ${DB_APP_USER:app_rw}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+  session:
+    redis:
+      repository-type: indexed     # permite derrubar todas as sessões de um usuário (US010)
+      namespace: relatorios:sessao
+  servlet:
+    multipart:
+      max-file-size: 50MB          # SPED: 50 MB (Guia §6.9); limites por tipo no ImportacaoService
+      max-request-size: 55MB
+  mail:
+    host: ${SMTP_HOST:smtp-relay.gmail.com}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USER:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${SMTP_AUTH:true}
+      mail.smtp.starttls.enable: true
+      mail.smtp.starttls.required: true
+      mail.smtp.connectiontimeout: 10000
+      mail.smtp.timeout: 10000
+
+server:
+  port: ${PORT:${API_PORT:8080}}   # Railway injeta PORT; localmente vale API_PORT
+  shutdown: graceful
+  forward-headers-strategy: framework   # atrás do Nginx (X-Forwarded-*)
+  error:
+    include-stacktrace: never
+    include-message: never
+  servlet:
+    session:
+      timeout: 30m                 # inatividade (US003)
+      cookie:
+        name: ${SESSION_COOKIE_NAME:SESSION}   # produção: __Host-session
+        http-only: true
+        secure: ${SESSION_COOKIE_SECURE:false} # produção: true
+        same-site: lax
+        path: /
+
+management:
+  server:
+    port: ${MANAGEMENT_PORT:8081}  # só na rede interna (Guia §7.3)
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  metrics:
+    tags:
+      application: relatorios-api
+
+logging:
+  structured:
+    format:
+      console: ${LOG_FORMAT:ecs}   # JSON em stdout (Guia §7.1); use "" em dev para texto
+  level:
+    root: INFO
+
+app:
+  ambiente: ${APP_ENV:dev}
+  origens-permitidas: ${APP_ORIGENS_PERMITIDAS:http://localhost:5173,http://localhost:8088}
+  sessao:
+    duracao-absoluta: 12h
+  senha:
+    validade-temporaria: 48h
+    max-tentativas: 5
+    bloqueio: 15m
+  admin:                            # semeado na primeira subida (AdminSeeder)
+    nome: ${ADMIN_NOME:}
+    email: ${ADMIN_EMAIL:}
+    senha-hash: ${ADMIN_SENHA_HASH:}
+  processamento:
+    url: ${PROCESSAMENTO_URL:http://localhost:${PROCESSAMENTO_PORT:8000}}
+    token: ${PROCESSAMENTO_TOKEN:}
+    timeout: 120s
+  email:
+    modo: ${EMAIL_MODO:desligado}   # desligado | smtp | gmail-api
+    remetente: ${EMAIL_REMETENTE:}
+    nome-remetente: ${EMAIL_NOME_REMETENTE:ContabilizaPharma}
+    url-plataforma: ${APP_URL_PUBLICA:http://localhost:8088}
+    enviar-senha-temporaria: ${EMAIL_ENVIAR_SENHA_TEMPORARIA:false}
+    gmail:
+      credenciais-arquivo: ${GOOGLE_SERVICE_ACCOUNT_FILE:}
+      usuario-delegado: ${GOOGLE_DELEGATED_USER:}
