@@ -7,14 +7,13 @@ import br.com.contabilizapharma.relatorios.core.seguranca.ErroLimiteTaxa;
 import br.com.contabilizapharma.relatorios.core.seguranca.LimitadorTaxa;
 import br.com.contabilizapharma.relatorios.core.seguranca.PoliticaSenha;
 import br.com.contabilizapharma.relatorios.core.seguranca.UsuarioAutenticado;
-import br.com.contabilizapharma.relatorios.empresa.Cnpj;
-import br.com.contabilizapharma.relatorios.empresa.EmpresaRepository;
-import br.com.contabilizapharma.relatorios.empresa.EstabelecimentoRepository;
+import br.com.contabilizapharma.relatorios.empresa.VinculoUsuarioEmpresa;
 import br.com.contabilizapharma.relatorios.usuario.Usuario;
 import br.com.contabilizapharma.relatorios.usuario.UsuarioRepository;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Locale;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -30,8 +29,7 @@ public class AuthService {
     static final String CREDENCIAIS_INVALIDAS = "E-mail ou senha inválidos.";
 
     private final UsuarioRepository usuarios;
-    private final EmpresaRepository empresas;
-    private final EstabelecimentoRepository estabelecimentos;
+    private final VinculoUsuarioEmpresa vinculos;
     private final PasswordEncoder encoder;
     private final PoliticaSenha politica;
     private final LimitadorTaxa limitador;
@@ -40,13 +38,11 @@ public class AuthService {
     private final TransactionTemplate transacao;
     private final String hashFicticio;
 
-    public AuthService(UsuarioRepository usuarios, EmpresaRepository empresas,
-                       EstabelecimentoRepository estabelecimentos, PasswordEncoder encoder,
+    public AuthService(UsuarioRepository usuarios, VinculoUsuarioEmpresa vinculos, PasswordEncoder encoder,
                        PoliticaSenha politica, LimitadorTaxa limitador, Auditoria auditoria,
                        AppProperties props, TransactionTemplate transacao) {
         this.usuarios = usuarios;
-        this.empresas = empresas;
-        this.estabelecimentos = estabelecimentos;
+        this.vinculos = vinculos;
         this.encoder = encoder;
         this.politica = politica;
         this.limitador = limitador;
@@ -127,15 +123,12 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public AuthDtos.UsuarioSaida descrever(UsuarioAutenticado u) {
-        AuthDtos.EmpresaResumo empresa = null;
-        if (u.empresaId() != null) {
-            empresa = empresas.findById(u.empresaId()).map(e -> {
-                String cnpj = estabelecimentos.findByEmpresaIdOrderByMatrizDescCnpjAsc(e.getId()).stream()
-                        .findFirst().map(est -> Cnpj.formatar(est.getCnpj())).orElse(null);
-                return new AuthDtos.EmpresaResumo(e.getId(), e.getRazaoSocial(), cnpj);
-            }).orElse(null);
-        }
-        return new AuthDtos.UsuarioSaida(u.id(), u.nome(), u.email(), u.perfil().name(), u.senhaTemporaria(), empresa);
+        // Administrador vê todas as empresas e não tem vínculo; cliente e colaborador veem as vinculadas
+        List<AuthDtos.EmpresaResumo> empresas = u.ehAdministrador() ? List.of()
+                : vinculos.empresasDoUsuario(u.id()).stream()
+                        .map(e -> new AuthDtos.EmpresaResumo(e.id(), e.razaoSocial(), e.cnpj(), e.ativa()))
+                        .toList();
+        return new AuthDtos.UsuarioSaida(u.id(), u.nome(), u.email(), u.perfil().name(), u.senhaTemporaria(), empresas);
     }
 
     private ErroNegocio credenciaisInvalidas() {

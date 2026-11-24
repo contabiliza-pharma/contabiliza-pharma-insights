@@ -3,6 +3,7 @@ package br.com.contabilizapharma.relatorios.admin;
 import br.com.contabilizapharma.relatorios.core.idempotencia.Idempotencia;
 import br.com.contabilizapharma.relatorios.core.seguranca.ContextoUsuario;
 import br.com.contabilizapharma.relatorios.core.seguranca.UsuarioAutenticado;
+import br.com.contabilizapharma.relatorios.empresa.VinculoUsuarioEmpresa;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -70,6 +71,23 @@ public class AdminController {
         return empresas.atualizarEstabelecimento(id, estabId, in, ContextoUsuario.atual().id(), req.getRemoteAddr());
     }
 
+    @GetMapping("/empresas/{id}/usuarios")
+    public List<VinculoUsuarioEmpresa.UsuarioVinculado> usuariosDaEmpresa(@PathVariable Integer id) {
+        return empresas.usuarios(id);
+    }
+
+    @PostMapping("/empresas/{id}/usuarios")
+    public List<VinculoUsuarioEmpresa.UsuarioVinculado> vincularUsuario(
+            @PathVariable Integer id, @Valid @RequestBody AdminDtos.VincularUsuarioEntrada in, HttpServletRequest req) {
+        return empresas.vincularUsuario(id, in.usuarioId(), ContextoUsuario.atual().id(), req.getRemoteAddr());
+    }
+
+    @DeleteMapping("/empresas/{id}/usuarios/{usuarioId}")
+    public List<VinculoUsuarioEmpresa.UsuarioVinculado> desvincularUsuario(
+            @PathVariable Integer id, @PathVariable Integer usuarioId, HttpServletRequest req) {
+        return empresas.desvincularUsuario(id, usuarioId, ContextoUsuario.atual().id(), req.getRemoteAddr());
+    }
+
     // ---------- Usuários ----------
     @GetMapping("/usuarios")
     public List<AdminDtos.UsuarioSaida> listarUsuarios(@RequestParam(required = false) String busca,
@@ -87,6 +105,13 @@ public class AdminController {
                 () -> ResponseEntity.status(HttpStatus.CREATED).body(usuarios.criar(in, admin.id(), req.getRemoteAddr())),
                 corpo -> Map.of("usuario", corpo.usuario(), "senhaTemporaria", "",
                         "aviso", "Conta já criada por esta solicitação. Se não anotou a senha, use Redefinir senha."));
+    }
+
+    @PutMapping("/usuarios/{id}/empresas")
+    public AdminDtos.UsuarioSaida definirEmpresas(@PathVariable Integer id,
+                                                  @Valid @RequestBody AdminDtos.EmpresasDoUsuarioEntrada in,
+                                                  HttpServletRequest req) {
+        return usuarios.definirEmpresas(id, in.empresaIds(), ContextoUsuario.atual().id(), req.getRemoteAddr());
     }
 
     @PostMapping("/usuarios/{id}/redefinir-senha")

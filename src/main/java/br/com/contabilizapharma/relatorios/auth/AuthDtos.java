@@ -3,6 +3,7 @@ package br.com.contabilizapharma.relatorios.auth;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import java.util.List;
 
 public final class AuthDtos {
 
@@ -19,9 +20,9 @@ public final class AuthDtos {
 
     public record UsuarioSaida(
             Integer id, String nome, String email, String perfil,
-            boolean senhaTemporaria, EmpresaResumo empresa) {}
+            boolean senhaTemporaria, List<EmpresaResumo> empresas) {}
 
-    public record EmpresaResumo(Integer id, String razaoSocial, String cnpj) {}
+    public record EmpresaResumo(Integer id, String razaoSocial, String cnpj, boolean ativa) {}
 
     public record CsrfSaida(String headerName, String token) {}
 }

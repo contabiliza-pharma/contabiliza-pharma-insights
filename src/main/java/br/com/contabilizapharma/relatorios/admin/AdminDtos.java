@@ -54,12 +54,29 @@ public final class AdminDtos {
             @NotBlank(message = "Informe o nome.") @Size(max = 150) String nome,
             @NotBlank(message = "Informe o e-mail.") @Email(message = "E-mail inválido.") @Size(max = 150) String email,
             @NotNull(message = "Escolha o perfil.") Perfil perfil,
-            Integer empresaId) {}
+            /** Cliente: ao menos uma. Colaborador: opcional (ex.: coordenador do fiscal). Administrador: ignorado. */
+            @Size(max = 500) List<@NotNull Integer> empresaIds) {}
 
-    public record UsuarioSaida(Integer id, String nome, String email, String perfil, Integer empresaId,
-                               String empresa, String situacao, boolean senhaTemporaria,
+    /** Empresa vinculada a um usuário, como aparece na lista de usuários. */
+    public record EmpresaRef(Integer id, String razaoSocial) {}
+
+    public record UsuarioSaida(Integer id, String nome, String email, String perfil, List<EmpresaRef> empresas,
+                               String situacao, boolean senhaTemporaria,
                                LocalDateTime senhaExpiraEm, LocalDateTime bloqueadoAte,
-                               LocalDateTime ultimoAcesso, LocalDateTime criadoEm) {}
+                               LocalDateTime ultimoAcesso, LocalDateTime criadoEm) {
+
+        UsuarioSaida comEmpresas(List<EmpresaRef> lista) {
+            return new UsuarioSaida(id, nome, email, perfil, lista, situacao, senhaTemporaria, senhaExpiraEm,
+                    bloqueadoAte, ultimoAcesso, criadoEm);
+        }
+    }
+
+    /** Substitui as empresas vinculadas a um usuário. */
+    public record EmpresasDoUsuarioEntrada(
+            @NotNull(message = "Informe as empresas.") @Size(max = 500) List<@NotNull Integer> empresaIds) {}
+
+    /** Vincula um usuário a uma empresa (pela tela da empresa). */
+    public record VincularUsuarioEntrada(@NotNull(message = "Escolha o usuário.") Integer usuarioId) {}
 
     /** A senha temporária aparece UMA vez, nesta resposta (US008); nunca é guardada em texto. */
     public record SenhaTemporariaSaida(UsuarioSaida usuario, String senhaTemporaria, LocalDateTime expiraEm,

@@ -3,6 +3,9 @@ package br.com.contabilizapharma.relatorios.admin;
 import br.com.contabilizapharma.relatorios.core.auditoria.Auditoria;
 import br.com.contabilizapharma.relatorios.core.erro.ErroNegocio;
 import br.com.contabilizapharma.relatorios.empresa.*;
+import br.com.contabilizapharma.relatorios.usuario.Perfil;
+import br.com.contabilizapharma.relatorios.usuario.Usuario;
+import br.com.contabilizapharma.relatorios.usuario.UsuarioRepository;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -19,13 +22,18 @@ public class EmpresaAdminService {
     private final EstabelecimentoRepository estabelecimentos;
     private final JdbcTemplate jdbc;
     private final Auditoria auditoria;
+    private final VinculoUsuarioEmpresa vinculos;
+    private final UsuarioRepository usuarios;
 
     public EmpresaAdminService(EmpresaRepository empresas, EstabelecimentoRepository estabelecimentos,
-                               JdbcTemplate jdbc, Auditoria auditoria) {
+                               JdbcTemplate jdbc, Auditoria auditoria, VinculoUsuarioEmpresa vinculos,
+                               UsuarioRepository usuarios) {
         this.empresas = empresas;
         this.estabelecimentos = estabelecimentos;
         this.jdbc = jdbc;
         this.auditoria = auditoria;
+        this.vinculos = vinculos;
+        this.usuarios = usuarios;
     }
 
     @Transactional(readOnly = true)
@@ -48,10 +56,53 @@ public class EmpresaAdminService {
         Empresa e = empresas.findById(id).orElseThrow(() -> ErroNegocio.naoEncontrado("Empresa não encontrada."));
         List<AdminDtos.EstabelecimentoSaida> estabs = estabelecimentos.findByEmpresaIdOrderByMatrizDescCnpjAsc(id)
                 .stream().map(EmpresaAdminService::saida).toList();
-        Long qtdUsuarios = jdbc.queryForObject("SELECT count(*) FROM usuario WHERE empresa_id = ?", Long.class, id);
         return new AdminDtos.EmpresaSaida(e.getId(), e.getRaizCnpj(), e.getRazaoSocial(),
                 e.getRegime() == null ? null : e.getRegime().name(), e.isAtiva(), e.getCriadoEm(), e.getVersao(),
-                estabs, qtdUsuarios == null ? 0 : qtdUsuarios);
+                estabs, vinculos.contarUsuarios(id));
+    }
+
+    // ---------- Usuários com acesso à empresa (vínculo N:N) ----------
+
+    @Transactional(readOnly = true)
+    public List<VinculoUsuarioEmpresa.UsuarioVinculado> usuarios(Integer empresaId) {
+        existe(empresaId);
+        return vinculos.usuariosDaEmpresa(empresaId);
+    }
+
+    @Transactional
+    public List<VinculoUsuarioEmpresa.UsuarioVinculado> vincularUsuario(Integer empresaId, Integer usuarioId,
+                                                                       Integer adminId, String ip) {
+        existe(empresaId);
+        Usuario u = usuarios.findById(usuarioId).orElseThrow(() -> ErroNegocio.invalido("Usuário não encontrado."));
+        if (u.getPerfil() == Perfil.administrador) {
+            throw ErroNegocio.invalido("O administrador vê todas as empresas; não é preciso vincular.");
+        }
+        if (vinculos.vincular(usuarioId, empresaId, adminId)) {
+            auditoria.registrar(adminId, "vincular_empresa", "usuario:" + usuarioId + " empresa:" + empresaId, ip);
+        }
+        return vinculos.usuariosDaEmpresa(empresaId);
+    }
+
+    @Transactional
+    public List<VinculoUsuarioEmpresa.UsuarioVinculado> desvincularUsuario(Integer empresaId, Integer usuarioId,
+                                                                          Integer adminId, String ip) {
+        existe(empresaId);
+        Usuario u = usuarios.findById(usuarioId).orElseThrow(() -> ErroNegocio.naoEncontrado("Usuário não encontrado."));
+        if (u.getPerfil() == Perfil.cliente && vinculos.temAcesso(usuarioId, empresaId)
+                && vinculos.contarEmpresas(usuarioId) <= 1) {
+            throw ErroNegocio.invalido("Esta é a única empresa de " + u.getNome()
+                    + ". Vincule outra empresa antes ou desative a conta.");
+        }
+        if (vinculos.desvincular(usuarioId, empresaId)) {
+            auditoria.registrar(adminId, "desvincular_empresa", "usuario:" + usuarioId + " empresa:" + empresaId, ip);
+        }
+        return vinculos.usuariosDaEmpresa(empresaId);
+    }
+
+    private void existe(Integer empresaId) {
+        if (!empresas.existsById(empresaId)) {
+            throw ErroNegocio.naoEncontrado("Empresa não encontrada.");
+        }
     }
 
     @Transactional

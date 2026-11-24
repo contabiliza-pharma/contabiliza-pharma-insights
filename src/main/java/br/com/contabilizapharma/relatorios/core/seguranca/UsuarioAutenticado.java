@@ -9,23 +9,24 @@ import java.time.Instant;
 /**
  * Usuário guardado na sessão (Redis). Não contém senha nem hash.
  * getName() devolve o id: é por ele que as sessões são indexadas e derrubadas (US010).
+ * As empresas do usuário NÃO ficam na sessão: são consultadas a cada requisição (tabela usuario_empresa),
+ * para que vincular ou desvincular tenha efeito imediato.
  */
 public record UsuarioAutenticado(
         Integer id,
         String nome,
         String email,
         Perfil perfil,
-        Integer empresaId,
         boolean senhaTemporaria,
         Instant loginEm) implements Principal, Serializable {
 
     public static UsuarioAutenticado de(Usuario u, Instant loginEm) {
         return new UsuarioAutenticado(u.getId(), u.getNome(), u.getEmail(), u.getPerfil(),
-                u.getEmpresaId(), u.isSenhaTemporaria(), loginEm);
+                u.isSenhaTemporaria(), loginEm);
     }
 
     public UsuarioAutenticado comSenhaDefinitiva() {
-        return new UsuarioAutenticado(id, nome, email, perfil, empresaId, false, loginEm);
+        return new UsuarioAutenticado(id, nome, email, perfil, false, loginEm);
     }
 
     @Override
@@ -35,5 +36,9 @@ public record UsuarioAutenticado(
 
     public boolean ehCliente() {
         return perfil == Perfil.cliente;
+    }
+
+    public boolean ehAdministrador() {
+        return perfil == Perfil.administrador;
     }
 }

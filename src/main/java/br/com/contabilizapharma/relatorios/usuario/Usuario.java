@@ -24,9 +24,6 @@ public class Usuario {
     @Column(nullable = false)
     private Perfil perfil;
 
-    @Column(name = "empresa_id")
-    private Integer empresaId;
-
     @Column(name = "senha_temporaria", nullable = false)
     private boolean senhaTemporaria = true;
 
@@ -53,12 +50,11 @@ public class Usuario {
 
     protected Usuario() {}
 
-    public Usuario(String nome, String email, String senhaHash, Perfil perfil, Integer empresaId) {
+    public Usuario(String nome, String email, String senhaHash, Perfil perfil) {
         this.nome = nome;
         this.email = email;
         this.senhaHash = senhaHash;
         this.perfil = perfil;
-        this.empresaId = empresaId;
     }
 
     public boolean estaBloqueado(LocalDateTime agora) {
@@ -96,7 +92,6 @@ public class Usuario {
     public String getSenhaHash() { return senhaHash; }
     public void setSenhaHash(String senhaHash) { this.senhaHash = senhaHash; }
     public Perfil getPerfil() { return perfil; }
-    public Integer getEmpresaId() { return empresaId; }
     public boolean isSenhaTemporaria() { return senhaTemporaria; }
     public LocalDateTime getSenhaExpiraEm() { return senhaExpiraEm; }
     public short getTentativasFalhas() { return tentativasFalhas; }

@@ -59,7 +59,7 @@ public class AdminSeeder implements ApplicationRunner {
                     + "Gere com o comando do README e coloque entre aspas simples no .env.");
         }
         String nome = vazio(admin.nome()) ? "Administrador" : admin.nome().trim();
-        Usuario u = new Usuario(nome, email, hash, Perfil.administrador, null);
+        Usuario u = new Usuario(nome, email, hash, Perfil.administrador);
         u.definirSenhaDefinitiva(hash);   // a senha foi escolhida por quem gerou o hash
         u = usuarios.save(u);
         auditoria.registrar(u.getId(), "seed_admin", "usuario:" + u.getId(), "local");

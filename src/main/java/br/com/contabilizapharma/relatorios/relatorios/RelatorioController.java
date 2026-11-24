@@ -6,10 +6,12 @@ import br.com.contabilizapharma.relatorios.core.seguranca.ContextoUsuario;
 import br.com.contabilizapharma.relatorios.core.seguranca.UsuarioAutenticado;
 import br.com.contabilizapharma.relatorios.empresa.Empresa;
 import br.com.contabilizapharma.relatorios.empresa.EmpresaRepository;
+import br.com.contabilizapharma.relatorios.empresa.VinculoUsuarioEmpresa;
 import br.com.contabilizapharma.relatorios.processamento.ProcessamentoClient;
 import jakarta.servlet.http.HttpServletRequest;
 import java.text.Normalizer;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.http.ContentDisposition;
@@ -21,12 +23,13 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Painel do cliente (EP04). O id da empresa NUNCA vem do cliente: é o da sessão (RNF02, Guia §6.11).
- * O administrador pode visualizar o painel de uma empresa informando ?empresaId= (registrado na auditoria).
+ * Painel do cliente (EP04). O usuário só vê as empresas vinculadas a ele (tabela usuario_empresa),
+ * conferidas no banco a cada requisição (RNF02, Guia §6.11). Com mais de uma empresa, informa ?empresaId=.
+ * O administrador vê qualquer empresa informando ?empresaId= (registrado na auditoria).
  */
 @RestController
 @RequestMapping("/api/v1/relatorios")
-@PreAuthorize("hasAnyRole('CLIENTE', 'ADMINISTRADOR')")
+@PreAuthorize("hasAnyRole('CLIENTE', 'COLABORADOR', 'ADMINISTRADOR')")
 public class RelatorioController {
 
     private static final Set<String> TIPOS = Set.of("faturamento", "folha", "icms");
@@ -34,12 +37,22 @@ public class RelatorioController {
 
     private final ProcessamentoClient processamento;
     private final EmpresaRepository empresas;
+    private final VinculoUsuarioEmpresa vinculos;
     private final Auditoria auditoria;
 
-    public RelatorioController(ProcessamentoClient processamento, EmpresaRepository empresas, Auditoria auditoria) {
+    public RelatorioController(ProcessamentoClient processamento, EmpresaRepository empresas,
+                               VinculoUsuarioEmpresa vinculos, Auditoria auditoria) {
         this.processamento = processamento;
         this.empresas = empresas;
+        this.vinculos = vinculos;
         this.auditoria = auditoria;
+    }
+
+    /** Empresas que o usuário pode visualizar (o administrador vê todas as ativas). */
+    @GetMapping("/empresas")
+    public List<VinculoUsuarioEmpresa.EmpresaVinculada> empresas() {
+        UsuarioAutenticado u = ContextoUsuario.atual();
+        return u.ehAdministrador() ? vinculos.todasAtivas() : vinculos.empresasDoUsuario(u.id());
     }
 
     @GetMapping("/painel")
@@ -82,25 +95,37 @@ public class RelatorioController {
 
     private Empresa empresaPermitida(Integer empresaIdInformado, HttpServletRequest req) {
         UsuarioAutenticado u = ContextoUsuario.atual();
-        if (u.ehCliente()) {
-            if (empresaIdInformado != null && !empresaIdInformado.equals(u.empresaId())) {
-                // Tentativa de acessar outra empresa: 404 e auditoria (Guia §6.11)
-                auditoria.registrar(u.id(), "acesso_negado", "empresa:" + empresaIdInformado, req.getRemoteAddr());
-                throw ErroNegocio.naoEncontrado("Relatório não encontrado.");
+        if (u.ehAdministrador()) {
+            if (empresaIdInformado == null) {
+                throw ErroNegocio.invalido("Escolha a empresa para visualizar o painel.");
             }
-            Empresa e = empresas.findById(u.empresaId())
-                    .orElseThrow(() -> ErroNegocio.naoEncontrado("Relatório não encontrado."));
-            if (!e.isAtiva()) {
-                throw ErroNegocio.proibido("O acesso desta empresa está suspenso. Fale com a contabilidade.");
-            }
+            Empresa e = empresas.findById(empresaIdInformado)
+                    .orElseThrow(() -> ErroNegocio.naoEncontrado("Empresa não encontrada."));
+            auditoria.registrar(u.id(), "visualizar_painel_cliente", "empresa:" + e.getId(), req.getRemoteAddr());
             return e;
         }
-        if (empresaIdInformado == null) {
-            throw ErroNegocio.invalido("Escolha a empresa para visualizar o painel.");
+        Integer alvo = empresaIdInformado;
+        if (alvo == null) {
+            List<VinculoUsuarioEmpresa.EmpresaVinculada> minhas = vinculos.empresasDoUsuario(u.id());
+            if (minhas.isEmpty()) {
+                throw ErroNegocio.naoEncontrado("Nenhuma empresa vinculada à sua conta. Fale com a contabilidade.");
+            }
+            if (minhas.size() > 1) {
+                throw ErroNegocio.invalido("Escolha a empresa para visualizar o painel.");
+            }
+            alvo = minhas.get(0).id();
+        } else if (!vinculos.temAcesso(u.id(), alvo)) {
+            // Empresa não vinculada: 404 e auditoria (Guia §6.11)
+            auditoria.registrar(u.id(), "acesso_negado", "empresa:" + alvo, req.getRemoteAddr());
+            throw ErroNegocio.naoEncontrado("Relatório não encontrado.");
         }
-        Empresa e = empresas.findById(empresaIdInformado)
-                .orElseThrow(() -> ErroNegocio.naoEncontrado("Empresa não encontrada."));
-        auditoria.registrar(u.id(), "visualizar_painel_cliente", "empresa:" + e.getId(), req.getRemoteAddr());
+        Empresa e = empresas.findById(alvo).orElseThrow(() -> ErroNegocio.naoEncontrado("Relatório não encontrado."));
+        if (!e.isAtiva()) {
+            throw ErroNegocio.proibido("O acesso desta empresa está suspenso. Fale com a contabilidade.");
+        }
+        if (!u.ehCliente()) {
+            auditoria.registrar(u.id(), "visualizar_painel_cliente", "empresa:" + e.getId(), req.getRemoteAddr());
+        }
         return e;
     }
 

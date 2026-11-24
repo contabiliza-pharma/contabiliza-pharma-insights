@@ -2,12 +2,10 @@ package br.com.contabilizapharma.relatorios.importacao;
 
 import br.com.contabilizapharma.relatorios.core.auditoria.Auditoria;
 import br.com.contabilizapharma.relatorios.core.erro.ErroNegocio;
-import br.com.contabilizapharma.relatorios.core.seguranca.LimitadorTaxa;
 import br.com.contabilizapharma.relatorios.core.seguranca.UsuarioAutenticado;
 import br.com.contabilizapharma.relatorios.processamento.ProcessamentoClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -45,15 +43,13 @@ public class ImportacaoService {
     }
 
     private final ProcessamentoClient processamento;
-    private final LimitadorTaxa limitador;
     private final Auditoria auditoria;
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
 
-    public ImportacaoService(ProcessamentoClient processamento, LimitadorTaxa limitador, Auditoria auditoria,
+    public ImportacaoService(ProcessamentoClient processamento, Auditoria auditoria,
                              JdbcTemplate jdbc, ObjectMapper mapper) {
         this.processamento = processamento;
-        this.limitador = limitador;
         this.auditoria = auditoria;
         this.jdbc = jdbc;
         this.mapper = mapper;
@@ -74,8 +70,8 @@ public class ImportacaoService {
             throw new ErroNegocio(HttpStatus.PAYLOAD_TOO_LARGE, "Arquivo muito grande",
                     "O limite para este tipo é de " + tipo.limite / MB + " MB.");
         }
-        limitador.consumir("importacao:" + usuario.id(), 30, Duration.ofHours(1),
-                "Limite de 30 importações por hora atingido. Tente de novo mais tarde.");
+        // Sem limite de quantidade: o colaborador pode enviar o lote do mês inteiro de uma vez.
+        // Arquivos repetidos não são regravados (hash SHA-256) e o Nginx limita a taxa por IP.
 
         ProcessamentoClient.Resposta r = processamento.importar(tipo.name(), arquivo.getResource(), nome,
                 usuario.id(), substituir);
